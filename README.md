@@ -53,6 +53,12 @@ $ echo 10 > /sys/class/sdr/vfzsdr/gain
 # To set frequency to (close to) 14.000.000Hz:
 $ echo 14000000 > /sys/class/sdr/vfzsdr/frequency
 
+# To read frequency:
+$ cat /sys/class/sdr/vfzsdr/frequency
+
+# Read frequency, mode and filter width:
+$ cat /sys/class/sdr/vfzsdr/status
+
 # To change mode:
 $ echo [AM|LSB|USB] > /sys/class/sdr/vfzsdr/mode
 

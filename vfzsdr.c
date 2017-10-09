@@ -116,6 +116,7 @@ static ssize_t vfzsdr_mode_store(struct device* dev,
             return -EINVAL;
     }
     _write_register(REG_MODE);
+    
     CRIT_END(&sem);
 
     return count;
