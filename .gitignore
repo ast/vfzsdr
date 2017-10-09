@@ -1,0 +1,13 @@
+# Ignore everything
+*
+
+# But not these files
+!.gitignore
+!README.md
+!Makefile
+!vfzsdr.c
+!vfzsdr.h
+!90-vfzsdr.rules 
+
+# ...even if they are in subdirectories
+!*/

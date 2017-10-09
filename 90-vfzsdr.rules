@@ -1,0 +1,2 @@
+# Rules file for the vfzsdr device driver
+KERNEL=="vfzsdr", SUBSYSTEM=="sdr", GROUP="i2c", MODE="0444"
