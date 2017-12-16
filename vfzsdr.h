@@ -69,7 +69,6 @@ enum vfzsdr_fconf {
 };
 
 struct vfzsdr_radio {
-    // Reg 1
     enum vfzsdr_mode     mode;
     enum vfzsdr_filter   filter;
     enum vfzsdr_sideband sideband;
@@ -79,6 +78,8 @@ struct vfzsdr_radio {
     enum vfzsdr_att      rx_att;
     enum vfzsdr_iffreq   if_freq;
     bool                 cw_tx_nomod;
+    bool                 i2s_enable;
+    bool                 i2s_iq_audio;
     enum vfzsdr_fconf    fconf;
     u8                   gain;
     s8                   clarifier;
