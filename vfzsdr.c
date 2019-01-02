@@ -3,7 +3,7 @@
 #include "vfzsdr.h"
 
 
-static uint frequency   = 14000000;
+static uint frequency   = 7074000;
 static uint gain        = 0x0a;
 static uint busno       = 1;
 static uint address     = 0x23;
@@ -29,85 +29,24 @@ static struct vfzsdr_radio *radio;
 
 static DEFINE_SEMAPHORE(sem);
 
+/* prototypes */
 static void _write_register(enum vfzsdr_reg);
 static inline u32 _normalize_frequency(u32);
-static inline u32 _unnormalize_frequency(u32);
+//static inline u32 _unnormalize_frequency(u32);
 
-static ssize_t vfzsdr_status_show(struct device *dev,
-                                  struct device_attribute *attr, char *buf)
+
+/* gain show/store */
+static ssize_t vfzsdr_gain_show(struct device *dev,
+                                     struct device_attribute *attr, char *buf)
 {
     int count = 0;
-    
     CRIT_BEG(&sem, ERESTARTSYS);
     if(buf) {
-        count = snprintf(buf, PAGE_SIZE, "%u %u %s %s\n",
-                         _unnormalize_frequency(radio->frequency),
-                         radio->gain,
-                         vfzsdr_mode_str[radio->mode],
-                         vfzsdr_filter_str[radio->filter]);
+        count = snprintf(buf, PAGE_SIZE, "%u\n", radio->gain);
     }
     CRIT_END(&sem);
     return count;
 }
-
-
-static ssize_t vfzsdr_filter_store(struct device* dev,
-                                 struct device_attribute* attr,
-                                 const char* buf, size_t count)
-{
-    //int err;
-    CRIT_BEG(&sem, ERESTARTSYS);
-
-    if (count > 0) {
-        switch (buf[0]) {
-            case 'n':
-                radio->filter = FILTER_NARROW;
-                break;
-            case 'w':
-                radio->filter = FILTER_WIDE;
-                break;
-            default:
-                CRIT_END(&sem);
-                return -EINVAL;
-        }
-    }
-    _write_register(REG_MODE);
-    CRIT_END(&sem);
-    
-    return count;
-}
-
-
-static ssize_t vfzsdr_mode_store(struct device* dev,
-                                 struct device_attribute* attr,
-                                 const char* buf, size_t count)
-{
-    //int err;
-    CRIT_BEG(&sem, ERESTARTSYS);
-    /* TODO: update to sysfs_match_string when Raspberry Pi kernel starts supporting it */
-    switch (match_string(vfzsdr_mode_str, 3, strim((char*)buf))) {
-        case 0:
-            radio->mode     = MODE_AM;
-            break;
-        case 1:
-            radio->mode     = MODE_SSB;
-            radio->sideband = SIDEBAND_LOWER;
-            break;
-        case 2:
-            radio->mode     = MODE_SSB;
-            radio->sideband = SIDEBAND_UPPER;
-            break;
-        default:
-            CRIT_END(&sem);
-            return -EINVAL;
-    }
-    _write_register(REG_MODE);
-    
-    CRIT_END(&sem);
-
-    return count;
-}
-
 
 static ssize_t vfzsdr_gain_store(struct device* dev,
                                  struct device_attribute* attr,
@@ -119,9 +58,11 @@ static ssize_t vfzsdr_gain_store(struct device* dev,
     CRIT_BEG(&sem, ERESTARTSYS);
     err = kstrtou8(buf, 10, &res);
     if (!err && res < 64) {
+        // TODO: compare if it's different?
         radio->gain = res;
         _write_register(REG_GAIN);
         err = count;
+        sysfs_notify(&dev->kobj, NULL, "gain");
     } else if (!err) {
         dev_err(dev, "gain parameter out of range 0-63");
         err = -ERANGE;
@@ -129,6 +70,21 @@ static ssize_t vfzsdr_gain_store(struct device* dev,
     CRIT_END(&sem);
     
     return err;
+}
+
+/* frequency show/store */
+static ssize_t vfzsdr_frequency_show(struct device *dev,
+                                  struct device_attribute *attr, char *buf)
+{
+    int count = 0;
+    CRIT_BEG(&sem, ERESTARTSYS);
+    if(buf) {
+        // _IF_ count = snprintf(buf, PAGE_SIZE, "%u\n",
+        //                 IF - _unnormalize_frequency(radio->frequency));
+        count = snprintf(buf, PAGE_SIZE, "%u\n", radio->frequency);
+    }
+    CRIT_END(&sem);
+    return count;
 }
 
 static ssize_t vfzsdr_frequency_store(struct device* dev,
@@ -140,16 +96,87 @@ static ssize_t vfzsdr_frequency_store(struct device* dev,
     
     CRIT_BEG(&sem, ERESTARTSYS);
     err = kstrtou32(buf, 10, &res);
+    // TODO: check range
     if (!err) {
-        radio->frequency = _normalize_frequency(res);
+        radio->frequency = res;
         _write_register(REG_FREQ);
         err = count;
     }
+    sysfs_notify(&dev->kobj, NULL, "frequency");
     CRIT_END(&sem);
     
     return err;
 }
 
+/* iqswap */
+static ssize_t vfzsdr_iqswap_show(struct device *dev,
+                                     struct device_attribute *attr, char *buf)
+{
+    int count = 0;
+    CRIT_BEG(&sem, ERESTARTSYS);
+    if(buf) {
+        count = snprintf(buf, PAGE_SIZE, "%d\n", radio->iq_swap);
+    }
+    CRIT_END(&sem);
+    return count;
+}
+
+static ssize_t vfzsdr_iqswap_store(struct device* dev,
+                                      struct device_attribute* attr,
+                                      const char* buf, size_t count)
+{
+    bool res;
+    int err;
+    
+    CRIT_BEG(&sem, ERESTARTSYS);
+    err = kstrtobool(buf, &res);
+    if (!err) {
+        radio->iq_swap = res;
+        _write_register(REG_FREQ);
+        err = count;
+    }
+    sysfs_notify(&dev->kobj, NULL, "iqswap");
+    CRIT_END(&sem);
+    
+    return err;
+}
+
+/* forxed_tx */
+static ssize_t vfzsdr_tx_show(struct device *dev,
+                                     struct device_attribute *attr, char *buf)
+{
+    int count = 0;
+    CRIT_BEG(&sem, ERESTARTSYS);
+    if(buf) {
+        count = snprintf(buf, PAGE_SIZE, "%d\n", radio->tx);
+    }
+    CRIT_END(&sem);
+    return count;
+}
+
+static ssize_t vfzsdr_tx_store(struct device* dev,
+                                   struct device_attribute* attr,
+                                   const char* buf, size_t count)
+{
+    bool res;
+    int err;
+    
+    CRIT_BEG(&sem, ERESTARTSYS);
+    err = kstrtobool(buf, &res);
+    if (!err) {
+        radio->tx = res;
+        _write_register(REG_MODE);
+        // we also need to change to tx freq
+        _write_register(REG_FREQ);
+        err = count;
+    }
+    sysfs_notify(&dev->kobj, NULL, "tx");
+    CRIT_END(&sem);
+    
+    return err;
+}
+
+/* tune store */
 static ssize_t vfzsdr_tune_store(struct device* dev,
                                  struct device_attribute* attr,
                                  const char* buf, size_t count)
@@ -157,21 +184,19 @@ static ssize_t vfzsdr_tune_store(struct device* dev,
     s16 res;
     int err;
     
-    dev_dbg(dev, "tune store");
-
-    err = kstrtos16(strim(buf), 10, &res);
+    err = kstrtos16(buf, 10, &res);
     
     if (!err) {
 
         CRIT_BEG(&sem, ERESTARTSYS);
-        radio->frequency += res;
+        radio->frequency -= res;
         /* TODO: check bounds */
         _write_register(REG_FREQ);
         CRIT_END(&sem);
 
         err = count;
         
-        sysfs_notify(&dev->kobj, NULL, "status");
+        sysfs_notify(&dev->kobj, NULL, "frequency");
     } else {
         dev_dbg(dev, "got %s error %d", buf, err);
     }
@@ -179,57 +204,23 @@ static ssize_t vfzsdr_tune_store(struct device* dev,
     return err;
 }
 
-static ssize_t vfzsdr_i2s_store(struct device* dev,
-                                struct device_attribute* attr,
-                                const char* buf, size_t count)
-{
-    bool res;
-    int  err;
-    
-    dev_dbg(dev, "i2s store");
-    
-    CRIT_BEG(&sem, ERESTARTSYS);
-
-    err = kstrtobool(strim(buf), &res);
-    
-    if (!err) {
-        radio->i2s_enable = res;
-        _write_register(REG_MODE);
-        err = count;
-        
-        sysfs_notify(&dev->kobj, NULL, "status");
-    } else {
-        dev_dbg(dev, "got %s error %d", buf, err);
-    }
-    
-    CRIT_END(&sem);
-    
-    return err;
-}
-
-DEVICE_ATTR(status, S_IRUSR | S_IRGRP | S_IROTH,
-            vfzsdr_status_show, NULL);
-DEVICE_ATTR(filter, S_IWUSR | S_IWGRP,
-            NULL, vfzsdr_filter_store);
-DEVICE_ATTR(mode, S_IWUSR | S_IWGRP,
-            NULL, vfzsdr_mode_store);
-DEVICE_ATTR(gain, S_IWUSR | S_IWGRP,
-            NULL, vfzsdr_gain_store);
-DEVICE_ATTR(frequency, S_IWUSR | S_IWGRP,
-            NULL, vfzsdr_frequency_store);
+DEVICE_ATTR(gain, S_IWUSR | S_IWGRP | S_IRUSR | S_IRGRP | S_IROTH,
+            vfzsdr_gain_show, vfzsdr_gain_store);
+DEVICE_ATTR(frequency, S_IWUSR | S_IWGRP | S_IRUSR | S_IRGRP | S_IROTH,
+            vfzsdr_frequency_show, vfzsdr_frequency_store);
+DEVICE_ATTR(iqswap, S_IWUSR | S_IWGRP | S_IRUSR | S_IRGRP | S_IROTH,
+            vfzsdr_iqswap_show, vfzsdr_iqswap_store);
+DEVICE_ATTR(tx, S_IWUSR | S_IWGRP | S_IRUSR | S_IRGRP | S_IROTH,
+            vfzsdr_tx_show, vfzsdr_tx_store);
 DEVICE_ATTR(tune, S_IWUSR | S_IWGRP,
             NULL, vfzsdr_tune_store);
-DEVICE_ATTR(i2s, S_IWUSR | S_IWGRP,
-            NULL, vfzsdr_i2s_store);
 
 static const struct attribute *vfzsdr_attrs[] = {
-    &dev_attr_status.attr,
-    &dev_attr_filter.attr,
-    &dev_attr_mode.attr,
     &dev_attr_gain.attr,
     &dev_attr_frequency.attr,
+    &dev_attr_iqswap.attr,
+    &dev_attr_tx.attr,
     &dev_attr_tune.attr,
-    &dev_attr_i2s.attr,
     NULL,
 };
 
@@ -248,64 +239,61 @@ static inline u32 _normalize_frequency(u32 frequency) {
     return norm_freq;
 }
 
-static inline u32 _unnormalize_frequency(u32 norm_freq) {
+/*static inline u32 _unnormalize_frequency(u32 norm_freq) {
     u32 frequency;
     frequency = ((u64)le32_to_cpu(norm_freq) * 0x393870000ull) >> 32;
     return frequency;
-}
+}*/
 
 static void _write_command(u8* data) {
-    print_hex_dump_debug("vfzsdr sending: ", DUMP_PREFIX_NONE, 5, 1, data, 5, true);
+    // print_hex_dump_debug("vfzsdr sending: ", DUMP_PREFIX_NONE, 5, 1, data, 5, true);
     i2c_master_send(client, data, 5);
 }
 
 static void _write_register(enum vfzsdr_reg reg) {
-
-    u8 cmd[5] = {0, 0, 0, 0, 0};
-    
-    dev_dbg(&client->dev, "writing register %d", reg);
-    
+    int norm_freq;
+    u8 cmd[5] = {0};
     cmd[0] = (reg << 6);
+
+    // dev_dbg(&client->dev, "writing register %d", reg);
+    
+    if (radio->tx) {
+        // No IF compensation in tx
+        norm_freq = _normalize_frequency(radio->frequency);
+    } else {
+        // IF compensation in rx
+        norm_freq = _normalize_frequency(IF - radio->frequency);
+    }
     
     switch (reg) {
         case REG_MODE:
-            cmd[0] |= (radio->mode << 5);
-            cmd[0] |= (radio->filter << 4);
-            cmd[0] |= (radio->sideband << 3);
-            cmd[0] |= (radio->forced_tx << 2);
-            cmd[0] |= (radio->forced_key << 1);
+            cmd[0] |= (radio->tx << 2);
+            cmd[0] |= (radio->key << 1);
             cmd[1] |= (radio->tx_att << 6);
             cmd[1] |= (radio->tx_att << 3);
             cmd[1] |= (radio->if_freq >> 2);
             cmd[2] |= (radio->if_freq << 7);
-            cmd[2] |= (radio->cw_tx_nomod << 5);
-            cmd[2] |= (radio->i2s_enable);
-            cmd[2] |= (radio->fconf << 3);
-            cmd[3] |= (radio->i2s_iq_audio << 7);
+            // cmd[2] |= (radio->fconf << 3);
             break;
         case REG_GAIN:
             cmd[4] |= (radio->gain & 0x3f);
             break;
         case REG_FREQ:
-            cmd[1] |= (radio->frequency >> (8*3)) & 0x01;
-            cmd[2] |= (radio->frequency >> (8*2)) & 0xff;
-            cmd[3] |= (radio->frequency >> (8*1)) & 0xff;
-            cmd[4] |= (radio->frequency >> (8*0)) & 0xff;
+            cmd[0] |= (radio->loopback << 1);
+            cmd[0] |= (radio->iq_swap);
+            cmd[1] |= (norm_freq >> (8*3)) & 0x01;
+            cmd[2] |= (norm_freq >> (8*2)) & 0xff;
+            cmd[3] |= (norm_freq >> (8*1)) & 0xff;
+            cmd[4] |= (norm_freq >> (8*0)) & 0xff;
             break;
         default:
             goto error;
     }
+    
     _write_command(cmd);
 error:
     return;
 }
-
-/* lowlevel i2c
-static u8 _read_status(void) {
-    u8 byte;
-    i2c_master_recv(client, &byte, 1);
-    return byte;
-}*/
 
 static ssize_t vfzsdr_read(struct file *file, char __user *buffer,
                            size_t length, loff_t *offset) {
@@ -314,7 +302,7 @@ static ssize_t vfzsdr_read(struct file *file, char __user *buffer,
     
     CRIT_BEG(&sem, EBUSY);
     
-    // Add error checking
+    // TODO: Add error checking
     i2c_master_recv(client, &byte, 1);
     
     err_count = copy_to_user(buffer, &byte, 1);
@@ -343,20 +331,17 @@ int vfzsdr_probe(struct i2c_client *client, const struct i2c_device_id *device_i
     if (!radio)
         return -ENOMEM;
     
-    radio->mode        = MODE_AM;
-    radio->filter      = FILTER_WIDE;
-    radio->sideband    = SIDEBAND_UPPER;
-    radio->forced_tx   = false;
-    radio->forced_key  = false;
+    radio->tx           = false;
+    radio->key          = false;
     radio->tx_att      = ATT_0DB;
     radio->rx_att      = ATT_0DB;
     radio->if_freq     = IF_45MHZ;
-    radio->cw_tx_nomod = true;
-    radio->i2s_enable  = true;
-    radio->i2s_iq_audio = true;
-    radio->fconf       = FCONF_DIRECT;
-    radio->gain        = (gain & 0x3f);
-    radio->frequency   = _normalize_frequency(frequency);
+    radio->iq_swap     = true;
+    // radio->fconf       = FCONF_DIRECT;
+    radio->loopback    = false;
+    radio->gain        = gain;
+    //radio->frequency   = IF - _normalize_frequency(frequency);
+    radio->frequency   = frequency;
     
     /* Write all registers */
     _write_register(REG_MODE);
@@ -397,7 +382,6 @@ static int __init vfzsdr_init(void)
     struct i2c_board_info board_info = {
         .type = "vfzsdr",
         .addr = address,
-        
     };
 
     pr_debug("vfzsdr initilizing");
@@ -500,6 +484,5 @@ module_exit(vfzsdr_cleanup);
 
 MODULE_LICENSE("GPL");            ///< The license type -- this affects available functionality
 MODULE_AUTHOR("Albin Stigo");    ///< The author -- visible when you use modinfo
-MODULE_DESCRIPTION("A simple Linux char driver for SM6VFZ FPGA SDR");  ///< The description -- see modinfo
+MODULE_DESCRIPTION("A Linux char driver for SM6VFZ FPGA SDR");  ///< The description -- see modinfo
 MODULE_VERSION("0.1");            ///< A version number to inform users
-

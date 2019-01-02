@@ -1,2 +1,3 @@
 # Rules file for the vfzsdr device driver
-KERNEL=="vfzsdr", SUBSYSTEM=="sdr", GROUP="i2c", MODE="0444"
+ACTION=="add", KERNEL=="vfzsdr", SUBSYSTEM=="sdr", GROUP="i2c", MODE="0444", RUN+="/bin/chgrp -R i2c /sys/class/sdr/vfzsdr/"
+ACTION=="remove", KERNEL=="vfzsdr", SUBSYSTEM=="sdr"

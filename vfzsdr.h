@@ -25,27 +25,12 @@
 #define CRIT_BEG(sem, error) if(down_interruptible(sem)) return -error
 #define CRIT_END(sem) up(sem)
 
+#define IF 45000000
+
 enum vfzsdr_reg {
     REG_MODE = 1,
     REG_GAIN = 2,
     REG_FREQ = 3,
-};
-
-const char *vfzsdr_mode_str[] = {"AM", "LSB", "USB"};
-enum vfzsdr_mode {
-    MODE_AM  = 0,
-    MODE_SSB = 1,
-};
-
-enum vfzsdr_sideband {
-    SIDEBAND_LOWER = 0,
-    SIDEBAND_UPPER = 1,
-};
-
-const char *vfzsdr_filter_str[] = {"narrow", "wide"};
-enum vfzsdr_filter {
-    FILTER_NARROW = 0,
-    FILTER_WIDE   = 1,
 };
 
 const char *vfzsdr_att_str[] = {"0dB", "6dB", "12dB", "18dB"};
@@ -69,22 +54,16 @@ enum vfzsdr_fconf {
 };
 
 struct vfzsdr_radio {
-    enum vfzsdr_mode     mode;
-    enum vfzsdr_filter   filter;
-    enum vfzsdr_sideband sideband;
-    bool                 forced_tx;
-    bool                 forced_key;
+    bool                 tx;
+    bool                 key;
     enum vfzsdr_att      tx_att;
     enum vfzsdr_att      rx_att;
     enum vfzsdr_iffreq   if_freq;
-    bool                 cw_tx_nomod;
-    bool                 i2s_enable;
-    bool                 i2s_iq_audio;
-    enum vfzsdr_fconf    fconf;
+    bool                 iq_swap;
+    // enum vfzsdr_fconf    fconf;
+    bool                 loopback;
     u8                   gain;
-    s8                   clarifier;
     u32                  frequency;
 };
-
 
 #endif /* vfzsdr_h */
